@@ -1,5 +1,7 @@
-/* External Recipient Check — DEBUG BUILD v4 (adds Office.onReady)
- * Any failure now shows up in the send dialog instead of hanging.
+/*
+ * External Recipient Check v1.0 — Courmacs Legal Ltd
+ * Smart Alerts OnMessageSend handler.
+ * Pauses sends to recipients outside INTERNAL_DOMAINS for confirmation.
  */
 
 Office.onReady();
@@ -22,20 +24,13 @@ function onMessageSendHandler(event) {
     event.completed(opts);
   }
 
-  // Watchdog: if nothing has completed within 15s, say so instead of hanging
-  setTimeout(function () {
-    done({
-      allowEvent: false,
-      errorMessage: "DEBUG v3: timed out reading recipients (getAsync never returned)."
-    });
-  }, 15000);
+  // Safety net: never leave the user stuck — if recipient lookup hasn't
+  // answered within 20s, allow the send (fail-open).
+  setTimeout(function () { done({ allowEvent: true }); }, 20000);
 
   try {
     var item = Office.context.mailbox.item;
-    if (!item) {
-      done({ allowEvent: false, errorMessage: "DEBUG v3: mailbox item unavailable." });
-      return;
-    }
+    if (!item) { done({ allowEvent: true }); return; }
 
     Promise.all([
       getRecipients(item.to),
@@ -53,7 +48,7 @@ function onMessageSendHandler(event) {
 
         var lines = external.map(function (r) {
           var name = r.displayName && r.displayName !== r.emailAddress
-            ? r.displayName + " — " : "";
+            ? r.displayName + " \u2014 " : "";
           return "\u2022 " + name + r.emailAddress;
         });
 
@@ -66,18 +61,9 @@ function onMessageSendHandler(event) {
             "or go back and review the recipients."
         });
       })
-      .catch(function (err) {
-        done({
-          allowEvent: false,
-          errorMessage: "DEBUG v3: recipient lookup failed — " +
-            (err && err.message ? err.message : JSON.stringify(err))
-        });
-      });
+      .catch(function () { done({ allowEvent: true }); });
   } catch (e) {
-    done({
-      allowEvent: false,
-      errorMessage: "DEBUG v3: handler exception — " + (e && e.message ? e.message : String(e))
-    });
+    done({ allowEvent: true });
   }
 }
 
