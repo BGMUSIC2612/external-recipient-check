@@ -1,6 +1,8 @@
-/* External Recipient Check — DEBUG BUILD v3
+/* External Recipient Check — DEBUG BUILD v4 (adds Office.onReady)
  * Any failure now shows up in the send dialog instead of hanging.
  */
+
+Office.onReady();
 
 var INTERNAL_DOMAINS = [
   "courmacslegal.co.uk",
@@ -99,6 +101,4 @@ function getRecipients(field) {
   });
 }
 
-if (typeof Office !== "undefined" && Office.actions && Office.actions.associate) {
-  Office.actions.associate("onMessageSendHandler", onMessageSendHandler);
-}
+Office.actions.associate("onMessageSendHandler", onMessageSendHandler);
