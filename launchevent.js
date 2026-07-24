@@ -1,8 +1,7 @@
 /*
- * External Recipient Check v1.2.2 — Courmacs Legal Ltd
+ * External Recipient Check v1.0 — Courmacs Legal Ltd
  * Smart Alerts OnMessageSend handler.
  * Pauses sends to recipients outside INTERNAL_DOMAINS for confirmation.
- * v1.2.2: dialog now flags attachment count and lists attachment names.
  */
 
 Office.onReady();
@@ -13,9 +12,7 @@ var INTERNAL_DOMAINS = [
   "401group.co.uk",
   "courmacslegal.onmicrosoft.com",
   "401groupcouk.onmicrosoft.com",
-  "companytriage.co.uk",
-  "advocap.co.uk",
-  "advocap.lu"
+  "companytriage.co.uk"
 ];
 
 function onMessageSendHandler(event) {
@@ -27,7 +24,8 @@ function onMessageSendHandler(event) {
     event.completed(opts);
   }
 
-  // Safety net: never leave the user stuck - fail open after 20s.
+  // Safety net: never leave the user stuck — if recipient lookup hasn't
+  // answered within 20s, allow the send (fail-open).
   setTimeout(function () { done({ allowEvent: true }); }, 20000);
 
   try {
@@ -37,12 +35,10 @@ function onMessageSendHandler(event) {
     Promise.all([
       getRecipients(item.to),
       getRecipients(item.cc),
-      getRecipients(item.bcc),
-      withTimeout(getAttachments(item), 4000, [])
+      getRecipients(item.bcc)
     ])
       .then(function (results) {
         var all = [].concat(results[0], results[1], results[2]);
-        var attachments = results[3];
         var external = all.filter(isExternal);
 
         if (external.length === 0) {
@@ -56,26 +52,14 @@ function onMessageSendHandler(event) {
           return "\u2022 " + name + r.emailAddress;
         });
 
-        var message = "";
-        if (attachments.length > 0) {
-          message += "\u26A0 This email has " + attachments.length +
-            (attachments.length === 1 ? " attachment" : " attachments") +
-            " and is going OUTSIDE Courmacs Legal:\n\n";
-        } else {
-          message += "This email is going OUTSIDE Courmacs Legal:\n\n";
-        }
-
-        message += lines.join("\n");
-
-        if (attachments.length > 0) {
-          var names = attachments.map(function (a) { return "\u2022 " + a.name; });
-          message += "\n\nAttached:\n" + names.join("\n");
-        }
-
-        message += "\n\nCheck each address is correct. Press 'Send Anyway' to confirm, " +
-          "or go back and review the recipients.";
-
-        done({ allowEvent: false, errorMessage: message });
+        done({
+          allowEvent: false,
+          errorMessage:
+            "This email is going OUTSIDE Courmacs Legal:\n\n" +
+            lines.join("\n") +
+            "\n\nCheck each address is correct. Press 'Send Anyway' to confirm, " +
+            "or go back and review the recipients."
+        });
       })
       .catch(function () { done({ allowEvent: true }); });
   } catch (e) {
@@ -100,39 +84,6 @@ function getRecipients(field) {
         reject(result.error || new Error("getAsync failed"));
       }
     });
-  });
-}
-
-// Resolve a promise or fall back to a default after ms - a hung API call
-// must never delay or suppress the recipient prompt.
-function withTimeout(promise, ms, fallback) {
-  return new Promise(function (resolve) {
-    var settled = false;
-    setTimeout(function () { if (!settled) { settled = true; resolve(fallback); } }, ms);
-    promise.then(function (v) { if (!settled) { settled = true; resolve(v); } },
-                 function ()  { if (!settled) { settled = true; resolve(fallback); } });
-  });
-}
-
-function getAttachments(item) {
-  return new Promise(function (resolve) {
-    try {
-      if (!item.getAttachmentsAsync) { resolve([]); return; }
-      item.getAttachmentsAsync(function (result) {
-        try {
-          if (result.status === Office.AsyncResultStatus.Succeeded) {
-            // Ignore inline images (signature logos etc.) - only real files matter.
-            var real = (result.value || []).filter(function (a) { return !a.isInline; });
-            resolve(real);
-          } else {
-            resolve([]);
-          }
-        } catch (e) { resolve([]); }
-      });
-    } catch (e) {
-      // Attachment info is a bonus; never let it break the recipient check.
-      resolve([]);
-    }
   });
 }
 
