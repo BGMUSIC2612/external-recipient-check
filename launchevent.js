@@ -1,8 +1,8 @@
 /*
- * External Recipient Check v1.2 — Courmacs Legal Ltd
+ * External Recipient Check v1.2.1 — Courmacs Legal Ltd
  * Smart Alerts OnMessageSend handler.
  * Pauses sends to recipients outside INTERNAL_DOMAINS for confirmation.
- * v1.2: dialog now flags attachment count and lists attachment names.
+ * v1.2.1: dialog now flags attachment count and lists attachment names.
  */
 
 Office.onReady();
@@ -38,7 +38,7 @@ function onMessageSendHandler(event) {
       getRecipients(item.to),
       getRecipients(item.cc),
       getRecipients(item.bcc),
-      getAttachments(item)
+      getAttachments(item).catch(function () { return []; })
     ])
       .then(function (results) {
         var all = [].concat(results[0], results[1], results[2]);
@@ -105,17 +105,23 @@ function getRecipients(field) {
 
 function getAttachments(item) {
   return new Promise(function (resolve) {
-    if (!item.getAttachmentsAsync) { resolve([]); return; }
-    item.getAttachmentsAsync(function (result) {
-      if (result.status === Office.AsyncResultStatus.Succeeded) {
-        // Ignore inline images (signature logos etc.) - only real files matter.
-        var real = (result.value || []).filter(function (a) { return !a.isInline; });
-        resolve(real);
-      } else {
-        // Attachment info is a bonus; never block the check on it.
-        resolve([]);
-      }
-    });
+    try {
+      if (!item.getAttachmentsAsync) { resolve([]); return; }
+      item.getAttachmentsAsync(function (result) {
+        try {
+          if (result.status === Office.AsyncResultStatus.Succeeded) {
+            // Ignore inline images (signature logos etc.) - only real files matter.
+            var real = (result.value || []).filter(function (a) { return !a.isInline; });
+            resolve(real);
+          } else {
+            resolve([]);
+          }
+        } catch (e) { resolve([]); }
+      });
+    } catch (e) {
+      // Attachment info is a bonus; never let it break the recipient check.
+      resolve([]);
+    }
   });
 }
 
